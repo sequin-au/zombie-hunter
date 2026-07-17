@@ -1,0 +1,69 @@
+# Zombie Hunter assessment policy — versioned, policy-as-file (never in prompts).
+# Verdict logic lives HERE, not in Gemini. Gemini analyses evidence; this file decides.
+schema_version: "1.1"
+policy_version: "2026-07-17.2"
+
+# Projects younger than this many days are never scored as zombies
+# (tenure guard) — unless labelled demo-zombie=true (seeded demo projects).
+tenure_guard_days: 60
+
+# Observable window for activity/billing signals.
+window_days: 90
+
+# Pillar weights (must sum to 1.0). Score 0-100 per pillar, 100 = deadest.
+weights:
+  billing: 0.35        # spend composition + variance (flat holding-cost beats low)
+  last_accessed: 0.40  # last HUMAN action / last deploy (machine heartbeat != life)
+  connectivity: 0.25   # inbound/outbound dependency surface (below veto level)
+
+# Verdict thresholds on the weighted deadness score.
+verdicts:
+  zombie_high: 80      # score >= 80 and no vetoes
+  zombie_medium: 55    # score >= 55 and no vetoes
+  # anything with a veto  -> investigate (hard rule, not a threshold)
+  # score < 55           -> active
+
+# Billing composition (a project whose entire spend is holding costs is a
+# corpse paying rent). Services listed here are holding-cost in their
+# ENTIRETY (matched on service.description). Mixed services like Compute
+# Engine must NOT be listed — their holding SKUs (disks, IPs, snapshots)
+# are matched by the sku keywords below instead.
+holding_cost_services:
+  - Cloud Storage
+  - Cloud DNS
+  - Cloud Key Management Service (KMS)
+holding_cost_sku_keywords:
+  - "Storage"
+  - "Static Ip"
+  - "External IP"
+  - "Snapshot"
+  - "Capacity"
+
+# Analyst model (Gemini via Vertex AI). The analyst argues FOR zombie, then
+# AGAINST itself, then must cite evidence IDs for its final position.
+analyst:
+  model: gemini-2.5-flash
+  location: us-central1
+  temperature: 0.0   # deterministic — identical evidence must yield identical verdicts
+
+# Hard vetoes — ANY hit forces verdict=investigate regardless of score.
+vetoes:
+  V1: "Service account used from/granted in other projects"
+  V2: "CMEK keys potentially encrypting data outside the project"
+  V3: "Shared VPC, VPC peering, PSC, VPN tunnels, or custom routes"
+  V4: "OAuth/IAP clients — deleting breaks logins elsewhere"
+  V5: "Destination for sinks/exports/TF state/DNS of other systems"
+  V6: "Artifact Registry images pulled by principals outside the project"
+  V7: "Resource liens or retain=true label"
+  V8: "API keys bound to service accounts — external callers authenticate through them"
+
+# Delete-risk profile (second axis: deadness = should we consider deleting,
+# delete_risk = can we delete safely). Runtime-activity signals feed ONLY
+# this — machine heartbeat never scores as life, but it does flag risk.
+delete_risk:
+  api_requests_threshold: 100        # API calls in window = still serving traffic
+  cpu_mean_threshold: 0.02           # mean instance CPU = something is computing
+  net_bytes_threshold: 104857600     # 100 MiB instance NIC traffic in window
+  seasonality_min_months: 6          # billing months needed before DR/seasonal
+                                     # recurrence analysis is meaningful (13mo ideal)
+  attestation_default_days: 90       # owner attestations expire after this

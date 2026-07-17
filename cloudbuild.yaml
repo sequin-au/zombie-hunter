@@ -1,0 +1,19 @@
+steps:
+  - id: pipeline
+    name: gcr.io/cloud-builders/docker
+    args: [build, -f, Dockerfile.pipeline,
+           -t, us-central1-docker.pkg.dev/$PROJECT_ID/zombie-images/pipeline:latest, .]
+  - id: portal
+    name: gcr.io/cloud-builders/docker
+    args: [build, -f, Dockerfile.portal,
+           -t, us-central1-docker.pkg.dev/$PROJECT_ID/zombie-images/portal:latest, .]
+  - id: seeder
+    name: gcr.io/cloud-builders/docker
+    args: [build, -f, Dockerfile.seeder,
+           -t, us-central1-docker.pkg.dev/$PROJECT_ID/zombie-images/seeder:latest, .]
+images:
+  - us-central1-docker.pkg.dev/$PROJECT_ID/zombie-images/pipeline:latest
+  - us-central1-docker.pkg.dev/$PROJECT_ID/zombie-images/portal:latest
+  - us-central1-docker.pkg.dev/$PROJECT_ID/zombie-images/seeder:latest
+options:
+  logging: CLOUD_LOGGING_ONLY

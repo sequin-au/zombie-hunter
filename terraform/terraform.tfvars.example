@@ -1,0 +1,10 @@
+billing_account          = "XXXXXX-XXXXXX-XXXXXX"
+org_id                   = "000000000000"
+enterprise_dev_folder_id = "folders/000000000000"
+sandbox_folder_id        = "folders/000000000000"
+billing_project          = "your-quota-billing-project"
+operator_members = [
+  "user:you@example.com",
+]
+exclude_projects = ["your-bootstrap-project"]
+owner_label      = "your-team-or-handle" # `owner` label applied to created projects

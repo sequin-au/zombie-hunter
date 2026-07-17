@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zombie Hunter</title>
+<style>
+:root{--bg:#0d1117;--panel:#161b22;--border:#30363d;--fg:#e6edf3;--dim:#8b949e;
+--green:#3fb950;--amber:#d29922;--red:#f85149;--purple:#bc8cff;--accent:#58a6ff}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,"Segoe UI",sans-serif}
+header{padding:18px 28px;border-bottom:1px solid var(--border);display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+h1{font-size:22px}h1 .z{filter:hue-rotate(80deg)}
+.sub{color:var(--dim);font-style:italic}
+.who{margin-left:auto;color:var(--dim);font-size:12px}
+main{max-width:1200px;margin:0 auto;padding:22px 28px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px}
+.card b{font-size:26px;display:block}
+.card span{color:var(--dim);font-size:12px}
+.bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+button{background:var(--panel);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:7px 14px;cursor:pointer;font-size:13px}
+button:hover{border-color:var(--accent)}
+button.primary{background:#1f6feb;border-color:#1f6feb}
+button.danger{border-color:var(--red);color:var(--red)}
+select{background:var(--panel);color:var(--fg);border:1px solid var(--border);border-radius:6px;padding:7px}
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--border);vertical-align:top}
+th{color:var(--dim);font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+tr:hover td{background:#1c2129}
+.v{padding:2px 9px;border-radius:12px;font-size:12px;font-weight:600;white-space:nowrap}
+.v-zombie-high{background:#3d1114;color:var(--red)}
+.v-zombie-medium{background:#3a2b10;color:var(--amber)}
+.v-investigate{background:#2a1f3d;color:var(--purple)}
+.v-active{background:#0f2b17;color:var(--green)}
+.r-low{background:#0f2b17;color:var(--green)}
+.r-medium{background:#3a2b10;color:var(--amber)}
+.r-high{background:#3d1114;color:var(--red)}
+.attest{font-size:11px;color:var(--green);border:1px solid var(--green);border-radius:4px;padding:0 5px;margin-left:6px}
+.seedtag{font-size:11px;color:var(--purple);border:1px solid var(--purple);border-radius:4px;padding:0 5px;margin-left:6px}
+.score{font-variant-numeric:tabular-nums}
+details{margin-top:6px}summary{cursor:pointer;color:var(--accent);font-size:12px}
+.ev{color:var(--dim);font-size:12px;margin:3px 0 0 14px}
+.analyst{border-left:3px solid var(--purple);padding:6px 10px;margin-top:6px;color:var(--dim);font-size:12px;background:#1a1625}
+h2{font-size:15px;margin:26px 0 10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em}
+.feed li{padding:6px 0;border-bottom:1px solid var(--border);list-style:none;color:var(--dim);font-size:13px}
+#toast{position:fixed;bottom:20px;right:20px;background:#1f6feb;padding:10px 18px;border-radius:8px;display:none}
+.notes{background:#2d1b00;border:1px solid var(--amber);border-radius:8px;padding:10px 14px;margin-bottom:16px;color:var(--amber);font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="z">🧟</span> Zombie Hunter</h1>
+  <span class="sub">GCP, the walking dead</span>
+  <span class="who" id="who"></span>
+</header>
+<main>
+  <div class="bar">
+    <button class="primary" onclick="act('/api/run-now','Assessment started')">▶ Run assessment now</button>
+    <select id="sched" onchange="setSched(this.value)">
+      <option value="">schedule…</option><option value="daily">daily 06:00</option>
+      <option value="weekly">weekly Mon</option><option value="monthly">monthly</option>
+      <option value="paused">paused</option>
+    </select>
+    <span style="flex:1"></span>
+    <button onclick="act('/api/seed','Seeding 5 demo zombies… (takes a few minutes)')">🧪 Seed demo zombies</button>
+    <button class="danger" onclick="if(confirm('Delete all seeded demo projects?'))act('/api/teardown','Teardown started')">🗑 Teardown seeds</button>
+  </div>
+  <div id="notes"></div>
+  <div class="cards" id="cards"></div>
+  <h2>Verdicts</h2>
+  <table><thead><tr><th>Project</th><th>Verdict</th><th>Delete risk</th><th>Score</th><th>Owner</th><th>Recommended action</th><th></th></tr></thead>
+  <tbody id="rows"></tbody></table>
+  <h2>Verdict transitions</h2><ul class="feed" id="feed"></ul>
+  <h2>Run history</h2><ul class="feed" id="hist"></ul>
+</main>
+<div id="toast"></div>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function toast(m){const t=$('toast');t.textContent=m;t.style.display='block';setTimeout(()=>t.style.display='none',4000)}
+async function act(url,msg){try{const r=await fetch(url,{method:'POST'});
+  if(!r.ok){let d;try{d=(await r.json()).detail}catch(_){d=r.status+' '+r.statusText}throw new Error(d||r.status)}
+  toast(msg)}catch(e){toast('⚠ '+e.message)}}
+async function setSched(p){if(!p)return;await act('/api/schedule/'+p,'Schedule: '+p)}
+async function attest(pid,type){try{
+  const r=await fetch('/api/ack/'+pid,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type})});
+  if(!r.ok)throw new Error((await r.json()).detail||r.status);
+  toast(type==='known-keep'?'Acknowledged':'Attested: no DR/seasonal use (90d)')}catch(e){toast('⚠ '+e.message)}}
+const ORDER=['zombie-high','zombie-medium','investigate','active'];
+async function load(){
+  fetch('/api/whoami').then(r=>r.json()).then(d=>$('who').textContent=d.email||'');
+  fetch('/api/schedule').then(r=>r.json()).then(d=>{if(d.preset&&d.preset!=='none')$('sched').value=SCHED_OK.includes(d.preset)?d.preset:''});
+  let run=null;
+  try{run=await(await fetch('/api/runs/latest')).json();if(run.detail)run=null}catch(e){}
+  const seeds=await(await fetch('/api/seeds')).json();
+  const seedIds=new Set((seeds.projects||[]).map(p=>p.id));
+  if(!run){$('cards').innerHTML='<div class="card"><b>—</b><span>No runs yet. Seed some zombies, then Run assessment.</span></div>';return}
+  const counts={};ORDER.forEach(v=>counts[v]=0);
+  run.projects.forEach(p=>counts[p.verdict]=(counts[p.verdict]||0)+1);
+  $('cards').innerHTML=ORDER.map(v=>`<div class="card"><b>${counts[v]||0}</b><span class="v v-${v}">${v}</span></div>`).join('')
+    +`<div class="card"><b>${run.population}</b><span>projects triaged</span></div>`
+    +`<div class="card"><b>${run.deep_assessed}</b><span>deep-assessed</span></div>`;
+  $('notes').innerHTML=(run.notes||[]).length?`<div class="notes">⚠ ${run.notes.map(esc).join(' · ')}</div>`:'';
+  const rows=run.projects.filter(p=>p.verdict!=='active'||seedIds.has(p.project_id))
+    .sort((a,b)=>ORDER.indexOf(a.verdict)-ORDER.indexOf(b.verdict)||b.score-a.score);
+  $('rows').innerHTML=rows.map(p=>{
+    const a=p.analyst||{};
+    const at=p.attestation&&p.attestation.type?p.attestation:null;
+    return `<tr><td><code>${esc(p.project_id)}</code>${seedIds.has(p.project_id)||p.labels?.['demo-zombie']==='true'?'<span class="seedtag">seed</span>':''}${at?`<span class="attest" title="by ${esc(at.by)} until ${esc((at.expires||'').slice(0,10))}">✓ ${esc(at.type)}</span>`:''}
+    <details><summary>evidence (${p.evidence.length})</summary>
+      ${p.evidence.map(e=>`<div class="ev"><code>${esc(e.id)}</code> [${esc(e.confidence)}] ${esc(e.summary)}</div>`).join('')}
+      ${(p.vetoes||[]).map(v=>`<div class="ev">⛔ <b>${esc(v.code)}</b> ${esc(v.description)}</div>`).join('')}
+      ${(p.delete_risk_reasons||[]).map(r=>`<div class="ev">⚖ ${esc(r)}</div>`).join('')}
+      ${a.case_against_zombie?`<div class="analyst"><b>Analyst self-challenge (${esc(a.final_position)}):</b> ${esc(a.case_against_zombie)}</div>`:''}
+    </details></td>
+    <td><span class="v v-${p.verdict}">${p.verdict}</span></td>
+    <td>${p.delete_risk?`<span class="v r-${p.delete_risk}" title="${esc((p.delete_risk_reasons||[]).join('; '))}">${p.delete_risk}</span>`:'<span style="color:var(--dim)">—</span>'}</td>
+    <td class="score">${p.score}<small style="color:var(--dim)">/100 ${esc(p.confidence)}</small></td>
+    <td>${esc(p.owner_of_record)||'<span style="color:var(--dim)">unknown</span>'}</td>
+    <td style="max-width:340px">${esc(p.recommended_action)}</td>
+    <td><button onclick="attest('${esc(p.project_id)}','known-keep')">ack</button>
+        <button onclick="attest('${esc(p.project_id)}','no-dr-seasonal-use')" title="Owner attests: no DR/seasonal role (expires in 90d)">attest no-DR</button></td></tr>`}).join('');
+  const hist=await(await fetch('/api/runs')).json();
+  $('hist').innerHTML=hist.map(h=>`<li>${esc(h.date)} — ${h.population} triaged, ${h.deep_assessed} deep — `
+    +ORDER.map(v=>`${h.verdicts?.[v]||0} ${v}`).join(', ')+`</li>`).join('');
+  $('feed').innerHTML=hist.flatMap(h=>(h.transitions||[]).map(t=>
+    `<li>${esc(t.date)} — <code>${esc(t.project_id)}</code> <span class="v v-${t.from}">${t.from}</span> → <span class="v v-${t.to}">${t.to}</span>${t.to==='active'?' 🎉 resurrection':''}</li>`)).join('')
+    ||'<li>No transitions yet — needs at least two runs.</li>';
+}
+const SCHED_OK=['daily','weekly','monthly','paused'];
+load();setInterval(load,60000);
+</script>
+</body>
+</html>

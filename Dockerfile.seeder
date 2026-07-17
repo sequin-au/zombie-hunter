@@ -1,0 +1,6 @@
+FROM gcr.io/google.com/cloudsdktool/google-cloud-cli:slim
+RUN pip install --no-cache-dir --break-system-packages google-cloud-firestore==2.*
+WORKDIR /app
+COPY seeder/ .
+ENV PYTHONUNBUFFERED=1
+CMD ["python3", "main.py"]
